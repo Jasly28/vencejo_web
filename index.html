@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vencejo - Piloto de Drones FPV y Estabilizados</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome para Iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        display: ['Space Grotesk', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            accent: '#EF4444', /* Rojo Dedsec de alto impacto */
+                            darkBg: '#050505',
+                            cardBg: '#0D0D10',
+                            border: '#1F1F23',
+                            muted: '#71717A'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #050505;
+            color: #F4F4F5;
+        }
+        .text-glow-red {
+            text-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
+        }
+        .border-glow:hover {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+            border-color: #EF4444;
+        }
+        
+        /* Ocultar el cursor por defecto en dispositivos con puntero físico */
+        @media (hover: hover) and (pointer: fine) {
+            body, a, button, input, select, textarea, .filter-btn {
+                cursor: none !important;
+            }
+        }
+
+        /* Líneas de escaneo retro estilo terminal hacker Dedsec */
+        .scanlines {
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%, 
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg, 
+                rgba(255, 0, 0, 0.06), 
+                rgba(0, 255, 0, 0.02), 
+                rgba(0, 0, 255, 0.06)
+            );
+            background-size: 100% 4px, 6px 100%;
+        }
+
+        /* Efecto de glitch sutil */
+        @keyframes glitch-anim {
+            0% { clip-path: inset(40% 0 61% 0); }
+            20% { clip-path: inset(92% 0 1% 0); }
+            40% { clip-path: inset(15% 0 80% 0); }
+            60% { clip-path: inset(80% 0 5% 0); }
+            80% { clip-path: inset(3% 0 92% 0); }
+            100% { clip-path: inset(40% 0 61% 0); }
+        }
+        .glitch-effect:hover {
+            animation: glitch-anim 1s infinite linear alternate-reverse;
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden">
+
+    <!-- Canvas para la estela del cursor personalizado -->
+    <canvas id="trail-canvas" class="fixed top-0 left-0 w-full h-full pointer-events-none z-[9999] hidden md:block"></canvas>
+
+    <!-- Cursor de la Nave Asteroids en Rojo Dedsec -->
+    <div id="custom-cursor" class="fixed pointer-events-none z-[10000] hidden md:block select-none -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out origin-center">
+        <!-- Nave clásica Asteroids apuntando hacia la derecha (0 grados) con brillo rojo de alta intensidad -->
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-brand-accent drop-shadow-[0_0_8px_rgba(239,68,68,0.85)]">
+            <path d="M22 12L4 4L8 12L4 20Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" fill="rgba(239, 68, 68, 0.2)"/>
+            <path d="M7 12L2 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" class="animate-pulse" />
+        </svg>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="fixed top-0 left-0 w-full z-50 bg-brand-darkBg/90 backdrop-blur-md border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center shadow-lg border border-white/10">
+                    <span class="text-brand-accent font-black text-xl font-display tracking-tight text-glow-red">▼</span>
+                </div>
+                <span class="text-white font-bold text-xl font-display tracking-wider">VENCEJO<span class="text-brand-accent text-glow-red">.</span></span>
+            </div>
+            
+            <!-- Desktop Menu -->
+            <div class="hidden md:flex items-center space-x-8">
+                <a href="#inicio" class="text-brand-muted hover:text-white transition-colors text-sm font-medium">Inicio</a>
+                <a href="#servicios" class="text-brand-muted hover:text-white transition-colors text-sm font-medium">Servicios</a>
+                <a href="#portfolio" class="text-brand-muted hover:text-white transition-colors text-sm font-medium">Portafolio</a>
+                <a href="#flota" class="text-brand-muted hover:text-white transition-colors text-sm font-medium">Nuestra Flota</a>
+                <a href="#contacto" class="bg-white text-brand-darkBg px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-zinc-200 transition-all shadow-md shadow-white/5">Reservar Vuelo</a>
+            </div>
+
+            <!-- Mobile Menu Button -->
+            <button onclick="toggleMobileMenu()" class="md:hidden text-white hover:text-zinc-400 transition-colors">
+                <i class="fa-solid fa-bars text-2xl" id="menu-icon"></i>
+            </button>
+        </div>
+
+        <!-- Mobile Menu Panel -->
+        <div id="mobile-menu" class="hidden md:hidden bg-brand-darkBg border-b border-white/10 px-6 py-6 space-y-4 transition-all">
+            <a href="#inicio" onclick="toggleMobileMenu()" class="block text-brand-muted hover:text-white transition-colors text-base font-medium">Inicio</a>
+            <a href="#servicios" onclick="toggleMobileMenu()" class="block text-brand-muted hover:text-white transition-colors text-base font-medium">Servicios</a>
+            <a href="#portfolio" onclick="toggleMobileMenu()" class="block text-brand-muted hover:text-white transition-colors text-base font-medium">Portafolio</a>
+            <a href="#flota" onclick="toggleMobileMenu()" class="block text-brand-muted hover:text-white transition-colors text-base font-medium">Nuestra Flota</a>
+            <a href="#contacto" onclick="toggleMobileMenu()" class="block text-center bg-white text-brand-darkBg px-5 py-3 rounded-xl font-semibold text-sm hover:bg-zinc-200 transition-all">Reservar Vuelo</a>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="inicio" class="relative pt-32 pb-24 md:pt-48 md:pb-40 overflow-hidden flex items-center min-h-screen">
+        <!-- Background Elements -->
+        <div class="absolute inset-0 z-0">
+            <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-zinc-800/[0.04] rounded-full blur-[120px]"></div>
+            <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-zinc-800/[0.04] rounded-full blur-[120px]"></div>
+            <div class="absolute inset-0 bg-[linear-gradient(to_right,#e0e0e0_1px,transparent_1px),linear-gradient(to_bottom,#e0e0e0_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-25"></div>
+        </div>
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+                <!-- Columna Izquierda: Mensajes Principales -->
+                <div class="lg:col-span-6 space-y-6 text-center lg:text-left">
+                    <div class="inline-flex items-center space-x-2 bg-white/5 border border-white/10 px-4 py-1.5 rounded-full text-xs font-semibold uppercase tracking-wider text-white">
+                        <span class="w-2 h-2 bg-brand-accent rounded-full animate-ping"></span>
+                        <span class="font-mono">SYS_STATUS: PILOTO_REGISTRADO_AESA</span>
+                    </div>
+                    <h1 class="text-4xl sm:text-5xl md:text-6xl font-extrabold font-display leading-tight tracking-tight text-white">
+                        ¿Necesitas un dron <br>
+                        <span class="text-brand-accent text-glow-red">
+                            en tu proyecto?
+                        </span>
+                    </h1>
+                    <p class="text-zinc-400 text-lg md:text-xl max-w-xl mx-auto lg:mx-0 leading-relaxed">
+                        Especialistas en recorridos dinámicos <strong class="text-white font-medium">FPV (First Person View)</strong> de proximidad y capturas cinemáticas <strong class="text-white font-medium">estabilizadas</strong> de alta fidelidad.
+                    </p>
+                    <div class="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 pt-4">
+                        <a href="#portfolio" class="w-full sm:w-auto text-center bg-white text-brand-darkBg font-bold px-8 py-4 rounded-xl shadow-lg hover:bg-zinc-200 hover:scale-[1.02] transition-all flex items-center justify-center space-x-2">
+                            <span>Ver Proyectos</span>
+                            <i class="fa-solid fa-play text-sm"></i>
+                        </a>
+                        <a href="#contacto" class="w-full sm:w-auto text-center border border-white/10 hover:border-brand-accent hover:bg-brand-accent/5 text-white px-8 py-4 rounded-xl font-semibold transition-all flex items-center justify-center space-x-2">
+                            <span>Iniciar Enlace</span>
+                            <i class="fa-solid fa-terminal text-xs"></i>
+                        </a>
+                    </div>
+                </div>
+                
+                <!-- Columna Derecha: Piloto FPV Estilo Dedsec (Sin formato tarjeta) -->
+                <div class="lg:col-span-6 relative flex justify-center">
+                    <div class="relative w-full max-w-[480px] aspect-[4/5] rounded-3xl overflow-hidden border border-zinc-800/80 bg-black/40 group">
+                        
+                        <!-- Imagen de Piloto FPV con Gafas (Estilo hacker techwear) -->
+                        <img src="https://images.unsplash.com/photo-1504051771394-dd2e66b2e08f?auto=format&fit=crop&w=800&q=80" 
+                             alt="Piloto FPV Dedsec" 
+                             class="w-full h-full object-cover filter grayscale contrast-150 brightness-75 transition-all duration-700 group-hover:scale-105 group-hover:brightness-90">
+                        
+                        <!-- Capa de color rojo Dedsec translúcido de acento -->
+                        <div class="absolute inset-0 bg-brand-accent/10 mix-blend-color pointer-events-none"></div>
+                        
+                        <!-- Capa de líneas de escaneo de terminal analógica -->
+                        <div class="absolute inset-0 scanlines pointer-events-none opacity-40"></div>
+                        
+                        <!-- Bordes e Indicadores Flotantes de Esquina Táctica (HUD) -->
+                        <div class="absolute top-4 left-4 w-6 h-6 border-t-2 border-l-2 border-brand-accent/80"></div>
+                        <div class="absolute top-4 right-4 w-6 h-6 border-t-2 border-r-2 border-brand-accent/80"></div>
+                        <div class="absolute bottom-4 left-4 w-6 h-6 border-b-2 border-l-2 border-brand-accent/80"></div>
+                        <div class="absolute bottom-4 right-4 w-6 h-6 border-b-2 border-r-2 border-brand-accent/80"></div>
+
+                        <!-- Glitch overlay visual decoration (Dedsec skull / logo simulated in ASCII) -->
+                        <div class="absolute top-8 left-8 font-mono text-[10px] text-brand-accent/80 tracking-widest leading-none pointer-events-none select-none bg-black/60 p-2 rounded border border-brand-accent/20">
+                            <span class="block">PILOT_ID: VENCEJO_FPV</span>
+                            <span class="block">STS: OPERATIONAL</span>
+                            <span class="block text-white animate-pulse">● SIGNAL_ESTABLISHED_</span>
+                        </div>
+
+                        <!-- Right Tech Sidebar diagnostics -->
+                        <div class="absolute bottom-8 right-8 font-mono text-[9px] text-zinc-400 tracking-wider text-right pointer-events-none select-none bg-black/70 p-3 rounded border border-white/5 space-y-1">
+                            <div class="text-brand-accent font-bold">// DIAGNOSTICS_</div>
+                            <div>LAT: 40.4167 N</div>
+                            <div>LON: 3.7037 W</div>
+                            <div class="text-white animate-pulse">AESA_ID: ES-UAS-2026_09A</div>
+                        </div>
+
+                        <!-- Glitch lines aesthetic block -->
+                        <div class="absolute bottom-8 left-8 flex items-center space-x-2 bg-brand-accent/20 border border-brand-accent/40 px-3 py-1 rounded backdrop-blur-sm">
+                            <span class="w-1.5 h-1.5 bg-brand-accent rounded-full animate-ping"></span>
+                            <span class="font-mono text-[10px] text-white tracking-widest uppercase">ENLACE_ACTIVO</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Services / Especialidades -->
+    <section id="servicios" class="py-24 bg-brand-cardBg/30 border-y border-white/5 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
+                <span class="text-zinc-500 font-mono text-xs tracking-widest uppercase">// ESCENARIOS_DE_OPERACIÓN</span>
+                <h2 class="text-3xl md:text-4xl font-extrabold font-display text-white">¿Qué tipo de plano necesita tu producción?</h2>
+                <p class="text-zinc-400">Si te has planteado esta duda, no te preocupes. Analizamos tu proyecto y combinamos la agilidad del vuelo FPV con la estabilidad del plano cinematográfico tradicional.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Servicio 1 -->
+                <div class="bg-brand-cardBg border border-white/5 hover:border-zinc-700 p-8 rounded-2xl transition-all hover:-translate-y-1 group text-center">
+                    <!-- Icono Centrado -->
+                    <div class="w-12 h-12 bg-zinc-900 border border-white/5 rounded-xl flex items-center justify-center mb-6 text-white group-hover:bg-white group-hover:text-brand-darkBg transition-all mx-auto">
+                        <i class="fa-solid fa-bolt text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 font-display">FPV Inmersivo Interiores</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed mb-6">
+                        Recorridos de una sola toma ("One-Take") volando a través de oficinas, hoteles, fábricas y restaurantes. Genera impacto inmediato en redes sociales.
+                    </p>
+                    <ul class="space-y-2 text-xs text-zinc-300 font-medium text-left max-w-xs mx-auto">
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Drones súper compactos (Cinewhoops)</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Hélices protegidas para total seguridad</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Planos continuos fluidos sin cortes</li>
+                    </ul>
+                </div>
+
+                <!-- Servicio 2 -->
+                <div class="bg-brand-cardBg border border-white/5 hover:border-zinc-700 p-8 rounded-2xl transition-all hover:-translate-y-1 group text-center">
+                    <!-- Icono Centrado -->
+                    <div class="w-12 h-12 bg-zinc-900 border border-white/5 rounded-xl flex items-center justify-center mb-6 text-white group-hover:bg-white group-hover:text-brand-darkBg transition-all mx-auto">
+                        <i class="fa-solid fa-mountain text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 font-display">El mundo desde arriba</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed mb-6">
+                        Tomas aéreas majestuosas con drones de gran sensor fotográfico. Estabilidad perfecta y calidad de imagen excepcional.
+                    </p>
+                    <ul class="space-y-2 text-xs text-zinc-300 font-medium text-left max-w-xs mx-auto">
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Fotografías aéreas de alta resolución</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Planos lentos, panorámicos y limpios</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Vídeo cinemático por excelencia</li>
+                    </ul>
+                </div>
+
+                <!-- Servicio 3 -->
+                <div class="bg-brand-cardBg border border-white/5 hover:border-zinc-700 p-8 rounded-2xl transition-all hover:-translate-y-1 group text-center">
+                    <!-- Icono Centrado -->
+                    <div class="w-12 h-12 bg-zinc-900 border border-white/5 rounded-xl flex items-center justify-center mb-6 text-white group-hover:bg-white group-hover:text-brand-darkBg transition-all mx-auto">
+                        <i class="fa-solid fa-gauge-high text-xl"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-white mb-3 font-display">Deportes de Acción y Motor</h3>
+                    <p class="text-zinc-400 text-sm leading-relaxed mb-6">
+                        Seguimiento veloz de vehículos, atletas y eventos dinámicos. Capaz de alcanzar velocidades de más de 120 km/h.
+                    </p>
+                    <ul class="space-y-2 text-xs text-zinc-300 font-medium text-left max-w-xs mx-auto">
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Persecución a alta velocidad</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Ángulos de cámara dinámicos y acrobáticos</li>
+                        <li class="flex items-center"><i class="fa-solid fa-check text-brand-accent mr-2"></i> Cámara de acción que lo capta todo</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Portfolio Section -->
+    <section id="portfolio" class="py-24 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-12">
+                <div>
+                    <span class="text-zinc-500 font-mono text-xs tracking-widest uppercase">// PRODUCCIONES_RECIENTES</span>
+                    <h2 class="text-3xl md:text-4xl font-extrabold font-display text-white mt-2">Nuestro Trabajo en Acción</h2>
+                </div>
+                
+                <!-- Filter Buttons -->
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="filterPortfolio('todos')" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-white text-brand-darkBg transition-all">Todos</button>
+                    <button onclick="filterPortfolio('fpv')" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-all">FPV Cinematográfico</button>
+                    <button onclick="filterPortfolio('corp')" class="filter-btn px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-all">Inmobiliaria & Corp</button>
+                </div>
+            </div>
+
+            <!-- Portfolio Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8" id="portfolio-grid">
+                
+                <!-- Portfolio Card 1 -->
+                <div class="portfolio-item fpv bg-brand-cardBg rounded-2xl overflow-hidden border border-white/5 group relative">
+                    <div class="relative aspect-video bg-zinc-900 overflow-hidden">
+                        <img src="https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&w=600&q=80" alt="FPV Hotel tour" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 grayscale group-hover:grayscale-0">
+                        <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span class="w-12 h-12 rounded-full bg-white text-brand-darkBg flex items-center justify-center text-sm shadow-md"><i class="fa-solid fa-play"></i></span>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <span class="px-2.5 py-1 bg-zinc-900 text-zinc-300 text-[10px] font-bold tracking-widest uppercase rounded border border-zinc-800">FPV INTERIOR</span>
+                        <h4 class="text-lg font-bold text-white mt-3 mb-2 font-display">One-Take Tour: Hotel de Lujo Marbella</h4>
+                        <p class="text-xs text-zinc-400">Vuelo continuo desde el lobby exterior, atravesando habitaciones y finalizando en la piscina infinita.</p>
+                    </div>
+                </div>
+
+                <!-- Portfolio Card 2 -->
+                <div class="portfolio-item corp bg-brand-cardBg rounded-2xl overflow-hidden border border-white/5 group relative">
+                    <div class="relative aspect-video bg-zinc-900 overflow-hidden">
+                        <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=600&q=80" alt="Luxury Real Estate" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 grayscale group-hover:grayscale-0">
+                        <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span class="w-12 h-12 rounded-full bg-white text-brand-darkBg flex items-center justify-center text-sm shadow-md"><i class="fa-solid fa-play"></i></span>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <span class="px-2.5 py-1 bg-zinc-900 text-zinc-300 text-[10px] font-bold tracking-widest uppercase rounded border border-zinc-800">INMOBILIARIA</span>
+                        <h4 class="text-lg font-bold text-white mt-3 mb-2 font-display">Presentación Mansión La Zagaleta</h4>
+                        <p class="text-xs text-zinc-400">Planos estáticos fluidos a gran escala, realzando la arquitectura de la propiedad y sus vistas espectaculares.</p>
+                    </div>
+                </div>
+
+                <!-- Portfolio Card 3 -->
+                <div class="portfolio-item fpv bg-brand-cardBg rounded-2xl overflow-hidden border border-white/5 group relative">
+                    <div class="relative aspect-video bg-zinc-900 overflow-hidden">
+                        <img src="https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=600&q=80" alt="FPV Supercar chasing" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 grayscale group-hover:grayscale-0">
+                        <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <span class="w-12 h-12 rounded-full bg-white text-brand-darkBg flex items-center justify-center text-sm shadow-md"><i class="fa-solid fa-play"></i></span>
+                        </div>
+                    </div>
+                    <div class="p-6">
+                        <span class="px-2.5 py-1 bg-zinc-900 text-zinc-300 text-[10px] font-bold tracking-widest uppercase rounded border border-zinc-800">FPV ACCIÓN</span>
+                        <h4 class="text-lg font-bold text-white mt-3 mb-2 font-display">Persecución Audi R8 en Circuito de Ascari</h4>
+                        <p class="text-xs text-zinc-400">Captura dinámica de alta velocidad persiguiendo a escasos centímetros del vehículo a más de 100 km/h.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Gamified Fleet Selector Section -->
+    <section id="flota" class="py-24 bg-brand-cardBg/30 border-t border-white/5 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
+            
+            <div class="text-center max-w-3xl mx-auto mb-16 space-y-4">
+                <span class="text-zinc-500 font-mono text-xs tracking-widest uppercase">// FLOTA_REGISTRADA</span>
+                <h2 class="text-3xl md:text-4xl font-extrabold font-display text-white">Sistemas de Vuelo Profesionales</h2>
+                <p class="text-zinc-400">Cada misión requiere un equipo de vuelo adaptado. Selecciona un dron para cargar su telemetría y especificaciones técnicas.</p>
+            </div>
+
+            <!-- Video Game Style Interface Container -->
+            <div class="relative max-w-5xl mx-auto flex items-center justify-between gap-4 md:gap-8">
+                
+                <!-- Left Nav Arrow Button -->
+                <button onclick="prevDrone()" class="nav-arrow group flex items-center justify-center w-12 h-12 md:w-16 md:h-16 rounded-xl border border-white/10 hover:border-brand-accent bg-zinc-950/60 text-white hover:text-brand-accent shadow-lg transition-all active:scale-95 shrink-0 z-10">
+                    <i class="fa-solid fa-chevron-left text-lg md:text-2xl transition-transform group-hover:-translate-x-1"></i>
+                </button>
+
+                <!-- Main Active Drone Viewport Card -->
+                <div id="fleet-viewport" class="w-full bg-brand-cardBg border border-white/10 rounded-3xl p-6 md:p-10 shadow-2xl relative transition-all duration-300 overflow-hidden min-h-[500px] flex flex-col md:flex-row items-center gap-8 md:gap-12">
+                    
+                    <!-- HUD grid decoration behind the active card -->
+                    <div class="absolute inset-0 bg-[linear-gradient(to_right,#1f2937_1px,transparent_1px),linear-gradient(to_bottom,#1f2937_1px,transparent_1px)] bg-[size:1.5rem_1.5rem] opacity-[0.05] pointer-events-none"></div>
+                    
+                    <!-- Left: Drone Visual Frame -->
+                    <div class="w-full md:w-1/2 flex flex-col items-center justify-center relative">
+                        <!-- HUD Crosshairs -->
+                        <div class="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-brand-accent opacity-60"></div>
+                        <div class="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-brand-accent opacity-60"></div>
+                        <div class="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-brand-accent opacity-60"></div>
+                        <div class="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-brand-accent opacity-60"></div>
+
+                        <!-- Active Drone Image Frame -->
+                        <div class="relative w-full aspect-square md:aspect-[4/3] rounded-2xl bg-zinc-950/80 border border-white/5 overflow-hidden flex items-center justify-center p-4">
+                            <img id="fleet-image" src="" alt="Dron Vencejo" class="w-full h-full object-contain transition-all duration-500 scale-95" onerror="this.src='https://images.unsplash.com/photo-1527977966376-1c8408f9f108?auto=format&fit=crop&w=600&q=80'">
+                            
+                            <!-- Tactical Overlay -->
+                            <div class="absolute bottom-2 left-3 text-[10px] font-mono text-zinc-500 tracking-widest">LENS: RECON FPV</div>
+                            <div class="absolute top-2 right-3 text-[10px] font-mono text-brand-accent animate-pulse">● LOCKED</div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Technical Details & Gaming Stats -->
+                    <div class="w-full md:w-1/2 space-y-6 relative z-10">
+                        <div class="space-y-2">
+                            <span id="fleet-class" class="inline-block px-3 py-1 rounded bg-brand-accent/10 border border-brand-accent/20 text-brand-accent text-xs font-bold font-mono tracking-widest"></span>
+                            <h3 id="fleet-title" class="text-3xl font-extrabold font-display text-white tracking-tight"></h3>
+                            <p id="fleet-desc" class="text-zinc-400 text-sm leading-relaxed"></p>
+                        </div>
+
+                        <!-- Video Game Performance Stats (Progress Bars) -->
+                        <div class="space-y-4 pt-4 border-t border-white/5">
+                            <h4 class="text-xs font-bold uppercase tracking-widest text-zinc-500 font-mono">RENDIMIENTO DE VUELO</h4>
+                            
+                            <!-- Speed -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-mono">
+                                    <span class="text-zinc-300">VELOCIDAD</span>
+                                    <span id="val-speed" class="text-brand-accent font-bold">0%</span>
+                                </div>
+                                <div class="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                    <div id="bar-speed" class="h-full bg-brand-accent rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Agility -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-mono">
+                                    <span class="text-zinc-300">AGILIDAD</span>
+                                    <span id="val-agility" class="text-brand-accent font-bold">0%</span>
+                                </div>
+                                <div class="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                    <div id="bar-agility" class="h-full bg-brand-accent rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Coverage/Range -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-mono">
+                                    <span class="text-zinc-300">ALCANCE</span>
+                                    <span id="val-range" class="text-brand-accent font-bold">0%</span>
+                                </div>
+                                <div class="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                    <div id="bar-range" class="h-full bg-brand-accent rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Stability -->
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-xs font-mono">
+                                    <span class="text-zinc-300">ESTABILIDAD</span>
+                                    <span id="val-stability" class="text-brand-accent font-bold">0%</span>
+                                </div>
+                                <div class="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                                    <div id="bar-stability" class="h-full bg-brand-accent rounded-full transition-all duration-1000 ease-out" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Technical Specs Metadata Footnote -->
+                        <div class="grid grid-cols-2 gap-4 pt-4 border-t border-white/5 text-xs font-mono text-zinc-400">
+                            <div>MASA DE VUELO: <span id="meta-weight" class="text-white font-bold"></span></div>
+                            <div id="meta-time-container">TIEMPO OPERACIÓN: <span id="meta-time" class="text-white font-bold"></span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Nav Arrow Button -->
+                <button onclick="nextDrone()" class="nav-arrow group flex items-center justify-center w-12 h-12 md:w-16 md:h-16 rounded-xl border border-white/10 hover:border-brand-accent bg-zinc-950/60 text-white hover:text-brand-accent shadow-lg transition-all active:scale-95 shrink-0 z-10">
+                    <i class="fa-solid fa-chevron-right text-lg md:text-2xl transition-transform group-hover:translate-x-1"></i>
+                </button>
+
+            </div>
+
+            <!-- Segmented Dot Navigation -->
+            <div id="fleet-dots" class="flex justify-center items-center space-x-3 mt-10">
+                <!-- Programmatically filled -->
+            </div>
+
+        </div>
+    </section>
+
+    <!-- Contact & Booking -->
+    <section id="contacto" class="py-24 bg-brand-cardBg/30 border-t border-white/5">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-16">
+                <!-- Contact Info -->
+                <div class="space-y-8">
+                    <div class="space-y-4">
+                        <span class="text-zinc-500 font-mono text-xs tracking-widest uppercase">// ESTABLECER_ENLACE</span>
+                        <h2 class="text-3xl md:text-4xl font-extrabold font-display text-white">¿Hablamos de tu Proyecto?</h2>
+                        <p class="text-zinc-400 text-sm leading-relaxed">
+                            Completa el formulario o contáctanos directamente para resolver cualquier duda. Evaluamos de manera inmediata las coordinaciones en el espacio aéreo.
+                        </p>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-white">
+                                <i class="fa-solid fa-envelope"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-zinc-500 block">Escríbenos por Email</span>
+                                <a href="mailto:vencejofpv@gmail.com" class="text-white hover:text-zinc-300 transition-colors text-sm font-semibold">vencejofpv@gmail.com</a>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="w-12 h-12 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-center text-white">
+                                <i class="fa-solid fa-phone"></i>
+                            </div>
+                            <div>
+                                <span class="text-xs text-zinc-500 block">Llámanos o WhatsApp</span>
+                                <a href="tel:+34610870615" class="text-white hover:text-zinc-300 transition-colors text-sm font-semibold">+34 610 870 615</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Form -->
+                <div class="bg-brand-cardBg border border-white/5 rounded-3xl p-8 relative">
+                    <form id="contact-form" onsubmit="handleFormSubmit(event)" class="space-y-6">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-zinc-400 tracking-wider mb-2">Nombre Completo</label>
+                            <input type="text" required placeholder="¿Cómo te llamas?" class="w-full bg-brand-darkBg/50 border border-white/10 text-white rounded-xl p-4 text-sm focus:border-white focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-zinc-400 tracking-wider mb-2">Correo Electrónico</label>
+                            <input type="email" required placeholder="tu@correo.com" class="w-full bg-brand-darkBg/50 border border-white/10 text-white rounded-xl p-4 text-sm focus:border-white focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-zinc-400 tracking-wider mb-2">Consulta</label>
+                            <textarea rows="4" required placeholder="Cuéntame cómo puedo ayudarte." class="w-full bg-brand-darkBg/50 border border-white/10 text-white rounded-xl p-4 text-sm focus:border-white focus:outline-none"></textarea>
+                        </div>
+                        <button type="submit" class="w-full bg-white text-brand-darkBg font-bold py-4 rounded-xl shadow-lg hover:bg-zinc-200 transition-colors">
+                            Enviar Mensaje
+                        </button>
+                    </form>
+
+                    <!-- Custom Success Message Box -->
+                    <div id="success-box" class="hidden absolute inset-0 bg-brand-cardBg/95 backdrop-blur-md rounded-3xl flex flex-col items-center justify-center text-center p-8 space-y-4">
+                        <div class="w-16 h-16 bg-white/10 text-white border border-white/20 rounded-full flex items-center justify-center text-2xl">
+                            <i class="fa-solid fa-circle-check"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-white">¡Mensaje Enviado con Éxito!</h3>
+                        <p class="text-xs text-zinc-400 max-w-sm">Nos pondremos en contacto contigo lo antes posible.</p>
+                        <button onclick="resetContactForm()" class="mt-4 px-6 py-2 bg-white/5 hover:bg-white/10 text-zinc-300 text-xs font-semibold rounded-lg transition-colors border border-white/10">Enviar otro mensaje</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-brand-darkBg border-t border-white/5 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-6 text-center">
+            <div class="flex items-center space-x-3">
+                <span class="text-white font-bold text-lg font-display tracking-wider">VENCEJO<span class="text-brand-accent">.</span></span>
+            </div>
+            <p class="text-xs text-zinc-500">© 2026 Vencejo. Todos los derechos reservados. Operadora de vuelo registrada conforme normativa EASA/AESA.</p>
+            <div class="flex space-x-4 text-zinc-400 text-lg">
+                <a href="https://www.instagram.com/vencejofpv/" class="hover:text-white transition-colors"><i class="fa-brands fa-instagram"></i></a>
+                <a href="#" class="hover:text-white transition-colors"><i class="fa-brands fa-youtube"></i></a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- App Scripts -->
+    <script>
+        // Handle portfolio dynamic filtering
+        function filterPortfolio(category) {
+            const items = document.querySelectorAll('.portfolio-item');
+            const btns = document.querySelectorAll('.filter-btn');
+
+            // Toggle active styles on buttons
+            btns.forEach(btn => {
+                if (btn.innerText.toLowerCase().includes(category) || (category === 'todos' && btn.innerText.toLowerCase().includes('todos'))) {
+                    btn.classList.remove('bg-zinc-900', 'hover:bg-zinc-800', 'text-zinc-300');
+                    btn.classList.add('bg-white', 'text-brand-darkBg');
+                } else {
+                    btn.classList.remove('bg-white', 'text-brand-darkBg');
+                    btn.classList.add('bg-zinc-900', 'hover:bg-zinc-800', 'text-zinc-300');
+                }
+            });
+
+            // Filter cards
+            items.forEach(item => {
+                if (category === 'todos' || item.classList.contains(category)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+        }
+
+        // Contact Form Submission
+        function handleFormSubmit(event) {
+            event.preventDefault();
+            // Show custom success modal overlay
+            document.getElementById('success-box').classList.remove('hidden');
+        }
+
+        function resetContactForm() {
+            document.getElementById('contact-form').reset();
+            document.getElementById('success-box').classList.add('hidden');
+        }
+
+        // Mobile menu controller
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            const icon = document.getElementById('menu-icon');
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                icon.className = "fa-solid fa-xmark text-2xl";
+            } else {
+                menu.classList.add('hidden');
+                icon.className = "fa-solid fa-bars text-2xl";
+            }
+        }
+
+        // DATABASE FOR THE GAMIFIED FLEET SELECTOR
+        const FLEET_DATABASE = [
+            {
+                name: "Pavo 20 Pro",
+                class: "CLASE: CINEWHOOP / INTERIORES",
+                desc: "Un dron extremadamente compacto y ágil. Hélices protegidas para evitar daños a personas y entornos. Está optimizado para volar de forma segura por el interior de oficinas, fábricas, museos y cerca de personas sin ningún riesgo.",
+                image: "https://images.unsplash.com/photo-1508614589041-895b88991e3e?auto=format&fit=crop&w=600&q=80",
+                stats: { speed: 65, agility: 95, range: 60, stability: 85 },
+                weight: "155g (Sub-250g)",
+                time: "5-7 min"
+            },
+            {
+                name: "Custom 5\"",
+                class: "CLASE: FREESTYLE / ALTA VELOCIDAD",
+                desc: "Dron construido a medida para cargar con cámaras de acción sin esfuerzo. Aceleración y velocidad punta absurdas, agilidad total. No importa qué quieras perseguir, este dron puede hacerlo mientras carga una cámara",
+                image: "https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&w=600&q=80",
+                stats: { speed: 100, agility: 98, range: 80, stability: 65 },
+                weight: "693g",
+                time: "4-6 min"
+            },
+            {
+                name: "DJI Mini 5 Pro",
+                class: "CLASE: CINE / ESTABILIZADO HD",
+                desc: "Dron estabilizado con un sensor de imagen impecable. El vídeo cinemático por excelencia. Si lo que buscas es una cámara de cine en el aire, esta es tu elección.",
+                image: "https://images.unsplash.com/photo-1473968512647-3e447244af8f?auto=format&fit=crop&w=600&q=80",
+                stats: { speed: 50, agility: 50, range: 100, stability: 100 },
+                weight: "249.9g (Sub-250g)",
+                time: "34 min"
+            }
+        ];
+
+        let activeDroneIndex = 0;
+
+        // Render Selector
+        function renderActiveDrone() {
+            const drone = FLEET_DATABASE[activeDroneIndex];
+            const viewport = document.getElementById('fleet-viewport');
+            
+            // Apply a minor glitch transition effect
+            viewport.classList.add('opacity-40', 'scale-[0.98]');
+            
+            setTimeout(() => {
+                // Set text metadata
+                document.getElementById('fleet-title').innerText = drone.name;
+                document.getElementById('fleet-class').innerText = drone.class;
+                document.getElementById('fleet-desc').innerText = drone.desc;
+                document.getElementById('meta-weight').innerText = drone.weight;
+                document.getElementById('meta-time').innerText = drone.time;
+                document.getElementById('fleet-image').src = drone.image;
+                document.getElementById('fleet-image').alt = drone.name;
+
+                // Animate stats bars
+                animateStat('speed', drone.stats.speed);
+                animateStat('agility', drone.stats.agility);
+                animateStat('range', drone.stats.range);
+                animateStat('stability', drone.stats.stability);
+
+                // Update dots status
+                updateSelectorDots();
+
+                viewport.classList.remove('opacity-40', 'scale-[0.98]');
+            }, 180);
+        }
+
+        function animateStat(id, targetValue) {
+            const bar = document.getElementById(`bar-${id}`);
+            const textValue = document.getElementById(`val-${id}`);
+            
+            // Start from 0 for the game-feel loading bar effect
+            bar.style.width = '0%';
+            textValue.innerText = '0%';
+            
+            setTimeout(() => {
+                bar.style.width = `${targetValue}%`;
+                textValue.innerText = `${targetValue}%`;
+            }, 50);
+        }
+
+        function createSelectorDots() {
+            const container = document.getElementById('fleet-dots');
+            container.innerHTML = '';
+            FLEET_DATABASE.forEach((_, idx) => {
+                const dot = document.createElement('button');
+                dot.onclick = () => {
+                    activeDroneIndex = idx;
+                    renderActiveDrone();
+                };
+                dot.className = "dot-indicator h-1.5 rounded-full transition-all duration-300";
+                container.appendChild(dot);
+            });
+            updateSelectorDots();
+        }
+
+        function updateSelectorDots() {
+            const dots = document.querySelectorAll('.dot-indicator');
+            dots.forEach((dot, idx) => {
+                if (idx === activeDroneIndex) {
+                    dot.className = "dot-indicator w-8 h-2 bg-brand-accent rounded-full text-glow-red shadow-[0_0_8px_rgba(239,68,68,0.7)]";
+                } else {
+                    dot.className = "dot-indicator w-3 h-2 bg-zinc-800 hover:bg-zinc-700 rounded-full";
+                }
+            });
+        }
+
+        function nextDrone() {
+            activeDroneIndex = (activeDroneIndex + 1) % FLEET_DATABASE.length;
+            renderActiveDrone();
+        }
+
+        function prevDrone() {
+            activeDroneIndex = (activeDroneIndex - 1 + FLEET_DATABASE.length) % FLEET_DATABASE.length;
+            renderActiveDrone();
+        }
+
+        // Listen for Keyboard Arrow keys to navigate like a console game
+        window.addEventListener('keydown', (e) => {
+            const flotaSection = document.getElementById('flota');
+            if (!flotaSection) return;
+            const rect = flotaSection.getBoundingClientRect();
+            // Only trigger keyboard select if user is looking at/near the Fleet section
+            if (rect.top < window.innerHeight && rect.bottom > 0) {
+                if (e.key === 'ArrowRight') nextDrone();
+                if (e.key === 'ArrowLeft') prevDrone();
+            }
+        });
+
+        // --- LÓGICA DEL CURSOR NAVE ASTEROIDS Y LA ESTELA ---
+        window.addEventListener('DOMContentLoaded', () => {
+            createSelectorDots();
+            renderActiveDrone();
+
+            const canvas = document.getElementById('trail-canvas');
+            const cursor = document.getElementById('custom-cursor');
+            if (!canvas || !cursor) return;
+
+            const ctx = canvas.getContext('2d');
+            let points = [];
+            const maxPoints = 25;
+
+            let mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+            let drone = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+            
+            let isHovering = false; 
+            let currentAngle = 0; 
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            window.addEventListener('mousemove', (e) => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            });
+
+            const interactiveSelectors = 'a, button, input, select, textarea, .filter-btn, .nav-arrow';
+            function attachHoverListeners() {
+                const elements = document.querySelectorAll(interactiveSelectors);
+                elements.forEach(el => {
+                    el.addEventListener('mouseenter', () => {
+                        isHovering = true;
+                        cursor.classList.add('scale-125');
+                    });
+                    el.addEventListener('mouseleave', () => {
+                        isHovering = false;
+                        cursor.classList.remove('scale-125');
+                    });
+                });
+            }
+            attachHoverListeners();
+
+            function updatePhysicsAndRender() {
+                const easeFactor = 0.16;
+                const dx = mouse.x - drone.x;
+                const dy = mouse.y - drone.y;
+                
+                drone.x += dx * easeFactor;
+                drone.y += dy * easeFactor;
+
+                cursor.style.left = `${drone.x}px`;
+                cursor.style.top = `${drone.y}px`;
+
+                const angle = Math.atan2(dy, dx);
+                const velocity = Math.sqrt(dx * dx + dy * dy);
+                
+                if (velocity > 0.5) {
+                    currentAngle = angle;
+                }
+                
+                cursor.style.transform = `translate3d(-50%, -50%, 0) rotate(${currentAngle}rad)`;
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                points.push({ x: drone.x, y: drone.y });
+                if (points.length > maxPoints) {
+                    points.shift();
+                }
+
+                if (points.length > 1) {
+                    for (let i = 0; i < points.length - 1; i++) {
+                        const start = points[i];
+                        const end = points[i + 1];
+                        const alpha = i / points.length;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                        
+                        ctx.strokeStyle = `rgba(244, 244, 245, ${alpha * 0.25})`;
+                        ctx.lineWidth = alpha * 1.8; 
+                        ctx.lineCap = 'round';
+                        ctx.stroke();
+                    }
+                }
+
+                requestAnimationFrame(updatePhysicsAndRender);
+            }
+
+            updatePhysicsAndRender();
+        });
+    </script>
+</body>
+</html>
